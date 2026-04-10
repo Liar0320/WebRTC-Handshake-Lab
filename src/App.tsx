@@ -16,7 +16,9 @@ import {
   CheckCircle2,
   AlertCircle,
   ArrowRightLeft,
-  Info
+  Info,
+  Globe,
+  MonitorSmartphone
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -34,6 +36,8 @@ type Message = {
   timestamp: Date;
 };
 
+type IceMode = 'stun' | 'local';
+
 // --- Utilities ---
 
 const encodeSignal = (obj: any) => {
@@ -50,10 +54,6 @@ const decodeSignal = (str: string) => {
   } catch (e) {
     return null;
   }
-};
-
-const STUN_SERVERS = {
-  iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
 };
 
 // --- Components ---
@@ -89,6 +89,7 @@ const StatusBadge = ({ label, state }: { label: string; state: string }) => {
 
 export default function App() {
   const [role, setRole] = useState<'sender' | 'receiver' | null>(null);
+  const [iceMode, setIceMode] = useState<IceMode>('stun');
   const [localSignal, setLocalSignal] = useState<string>('');
   const [remoteSignalInput, setRemoteSignalInput] = useState<string>('');
   const [connectionState, setConnectionState] = useState<ConnectionState>({
@@ -108,7 +109,14 @@ export default function App() {
   const initPC = useCallback(() => {
     if (pcRef.current) pcRef.current.close();
     
-    const pc = new RTCPeerConnection(STUN_SERVERS);
+    // Configure ICE Servers based on user selection
+    const config: RTCConfiguration = {
+      iceServers: iceMode === 'stun' 
+        ? [{ urls: "stun:stun.l.google.com:19302" }] 
+        : [] // Empty array means Local Only (Host candidates)
+    };
+    
+    const pc = new RTCPeerConnection(config);
     pcRef.current = pc;
 
     pc.onsignalingstatechange = () => {
@@ -126,7 +134,7 @@ export default function App() {
     };
 
     return pc;
-  }, []);
+  }, [iceMode]);
 
   // Setup Data Channel listeners
   const setupDataChannel = (dc: RTCDataChannel) => {
@@ -236,37 +244,79 @@ export default function App() {
         {/* Left Column: Controls & Signaling */}
         <div className="lg:col-span-7 space-y-6">
           
-          {/* Role Selection */}
+          {/* Configuration & Role Selection */}
           {!role && (
             <motion.div 
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
-              className="grid grid-cols-2 gap-4"
+              className="space-y-6"
             >
-              <button 
-                onClick={startAsSender}
-                className="group p-8 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 transition-all text-left space-y-4"
-              >
-                <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <Activity className="w-6 h-6 text-emerald-400" />
+              {/* Network Config */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                <h2 className="font-semibold mb-4 flex items-center gap-2">
+                  <Globe className="w-4 h-4 text-slate-400" />
+                  Network Configuration
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setIceMode('stun')}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                      iceMode === 'stun' 
+                        ? 'bg-emerald-500/10 border-emerald-500/50 ring-1 ring-emerald-500/50' 
+                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-bold ${iceMode === 'stun' ? 'text-emerald-400' : 'text-slate-300'}`}>Public (STUN)</span>
+                      {iceMode === 'stun' && <CheckCircle2 className="w-4 h-4 text-emerald-500" />}
+                    </div>
+                    <p className="text-xs text-slate-500">Uses Google STUN. Works across different networks (4G to Wi-Fi).</p>
+                  </button>
+                  
+                  <button
+                    onClick={() => setIceMode('local')}
+                    className={`p-4 rounded-xl border text-left transition-all ${
+                      iceMode === 'local' 
+                        ? 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/50' 
+                        : 'bg-slate-950 border-slate-800 hover:border-slate-700'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className={`font-bold ${iceMode === 'local' ? 'text-blue-400' : 'text-slate-300'}`}>Local Only</span>
+                      {iceMode === 'local' && <CheckCircle2 className="w-4 h-4 text-blue-500" />}
+                    </div>
+                    <p className="text-xs text-slate-500">No servers. Only works if both peers are on the same Wi-Fi/LAN.</p>
+                  </button>
                 </div>
-                <div>
-                  <h3 className="font-bold text-xl">Role: Sender</h3>
-                  <p className="text-slate-400 text-sm mt-1">Initiate a connection by generating an Offer signal.</p>
-                </div>
-              </button>
-              <button 
-                onClick={startAsReceiver}
-                className="group p-8 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left space-y-4"
-              >
-                <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
-                  <ShieldCheck className="w-6 h-6 text-blue-400" />
-                </div>
-                <div>
-                  <h3 className="font-bold text-xl">Role: Receiver</h3>
-                  <p className="text-slate-400 text-sm mt-1">Wait for an Offer and generate an Answer signal.</p>
-                </div>
-              </button>
+              </div>
+
+              {/* Roles */}
+              <div className="grid grid-cols-2 gap-4">
+                <button 
+                  onClick={startAsSender}
+                  className="group p-8 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 transition-all text-left space-y-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <Activity className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xl">Role: Sender</h3>
+                    <p className="text-slate-400 text-sm mt-1">Initiate a connection by generating an Offer signal.</p>
+                  </div>
+                </button>
+                <button 
+                  onClick={startAsReceiver}
+                  className="group p-8 rounded-2xl bg-slate-900 border border-slate-800 hover:border-blue-500/50 transition-all text-left space-y-4"
+                >
+                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center group-hover:scale-110 transition-transform">
+                    <ShieldCheck className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-xl">Role: Receiver</h3>
+                    <p className="text-slate-400 text-sm mt-1">Wait for an Offer and generate an Answer signal.</p>
+                  </div>
+                </button>
+              </div>
             </motion.div>
           )}
 
