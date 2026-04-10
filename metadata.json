@@ -1,0 +1,5 @@
+{
+  "name": "WebRTC Handshake Lab",
+  "description": "An educational tool to understand WebRTC SDP and ICE exchange through manual signaling.",
+  "requestFramePermissions": []
+}
